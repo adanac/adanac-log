@@ -1,16 +1,19 @@
-package com.adanac.framework.log;
+package com.adanac.framework.log.config;
 
+import java.io.FileNotFoundException;
 import java.io.StringReader;
+import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.ibatis.logging.LogException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.bridge.SLF4JBridgeHandler;
+import org.springframework.util.ResourceUtils;
+import org.springframework.util.SystemPropertyUtils;
 import org.xml.sax.InputSource;
 
-import com.adanac.framework.statistics.VersionStatistics;
+import com.adanac.framework.log.LogConfigManager;
+import com.adanac.framework.log.exception.LogException;
 import com.adanac.framework.uniconfig.client.UniconfigClient;
 import com.adanac.framework.uniconfig.client.UniconfigClientImpl;
 import com.adanac.framework.uniconfig.client.UniconfigListener;
@@ -21,14 +24,20 @@ import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.core.joran.spi.JoranException;
 
 /**
- * 
+ * 功能描述： 根据logback指定配置文件目录及文件
+ * 名实现对logback的初始化
+ * eg: convert property value of type 'java.lang.String' to required type 'java.lang.Class'
  * @author adanac
  * @version 1.0
  */
-public class LogConfigManager {
+public class LogbackConfigurer {
 	private static final Logger logger = LoggerFactory.getLogger(LogConfigManager.class);
 
-	private static final String APP_LOG_CONFIG_PATH = "/log.config";
+	/** Pseudo URL prefix for loading from the class path: "classpath:" */
+	public static final String CLASSPATH_URL_PREFIX = "classpath:";
+
+	/** Extension that indicates a log4j XML config file: ".xml" */
+	public static final String XML_FILE_EXTENSION = ".xml";
 
 	private static final String GLOBAL_LOG_CONFIG_PATH = "/log.global";
 
@@ -36,22 +45,63 @@ public class LogConfigManager {
 
 	private static volatile UniconfigNode globalConfigNode;
 
+	private static volatile String configLocation = "";
+
 	private static volatile Map<String, UniconfigNode> globalPieceConfigNodes = new ConcurrentHashMap<String, UniconfigNode>();
 
 	private static UniconfigListener listener = new UniconfigListener() {
 		@Override
 		public void execute(String oldValue, String newValue) {
-			doLogConfigure();
+			initWithUnitConfig(configLocation);
 		}
 	};
 
-	static {
-		SLF4JBridgeHandler.install();
-		VersionStatistics.reportVersion(LogConfigManager.class);
+	public static void initLogging(String location) throws FileNotFoundException, JoranException {
+
+		String lowerStr = location.toLowerCase();
+		if (0 == lowerStr.indexOf(CLASSPATH_URL_PREFIX) && lowerStr.endsWith(XML_FILE_EXTENSION)) {
+			initWithFile(location);
+		} else {
+			configLocation = location;
+			initWithUnitConfig(location);
+		}
 	}
 
-	public static void init() {
-		doLogConfigure();
+	private static void initWithFile(String location) throws FileNotFoundException, JoranException {
+		String resolvedLocation = SystemPropertyUtils.resolvePlaceholders(location);
+		URL url = ResourceUtils.getURL(resolvedLocation);
+		if (resolvedLocation.toLowerCase().endsWith(XML_FILE_EXTENSION)) {
+			LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+			loggerContext.reset();
+			JoranConfigurator joranConfigurator = new JoranConfigurator();
+			joranConfigurator.setContext(loggerContext);
+			joranConfigurator.doConfigure(url);
+		}
+	}
+
+	private static void initWithUnitConfig(String location) {
+		UniconfigClient client = UniconfigClientImpl.getInstance();
+		if (appConfigNode == null) {
+			appConfigNode = client.getConfig(location);
+			appConfigNode.sync();
+			appConfigNode.monitor(listener);
+		}
+		String appConfig = appConfigNode.getValue();
+		String globalConfigs = getGlobalConfigs();
+		if (appConfig != null && !appConfig.equals("")) {
+			String logConfig = combineLogConfig(appConfig, globalConfigs);
+			StringReader reader = new StringReader(logConfig);
+			InputSource is = new InputSource(reader);
+			LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+			loggerContext.reset();
+			JoranConfigurator joranConfigurator = new JoranConfigurator();
+			joranConfigurator.setContext(loggerContext);
+			try {
+				joranConfigurator.doConfigure(is);
+			} catch (JoranException ex) {
+				logger.warn("Exception:", ex);
+			}
+		}
 	}
 
 	private static String getGlobalConfigs() {
@@ -92,32 +142,6 @@ public class LogConfigManager {
 		String configs = sb.toString();
 		checkGlobalConfigFormat(configs);
 		return configs;
-	}
-
-	protected synchronized static void doLogConfigure() {
-		logger.info("begin do log configure.");
-		UniconfigClient client = UniconfigClientImpl.getInstance();
-		if (appConfigNode == null) {
-			appConfigNode = client.getConfig(APP_LOG_CONFIG_PATH);
-			appConfigNode.sync();
-			appConfigNode.monitor(listener);
-		}
-		String appConfig = appConfigNode.getValue();
-		String globalConfigs = getGlobalConfigs();
-		if (appConfig != null && !appConfig.equals("")) {
-			String logConfig = combineLogConfig(appConfig, globalConfigs);
-			StringReader reader = new StringReader(logConfig);
-			InputSource is = new InputSource(reader);
-			LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-			loggerContext.reset();
-			JoranConfigurator joranConfigurator = new JoranConfigurator();
-			joranConfigurator.setContext(loggerContext);
-			try {
-				joranConfigurator.doConfigure(is);
-			} catch (JoranException ex) {
-				logger.warn("Exception:", ex);
-			}
-		}
 	}
 
 	private static String combineLogConfig(String appConfig, String globalConfigs) {
