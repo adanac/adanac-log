@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 import com.adanac.framework.lang.dto.ExceptionEventMessage;
 import com.adanac.framework.lang.dto.TraceEventMessage;
 import com.adanac.framework.lang.dto.TraceEventMessage.LOG_LEVEL;
-import com.adanac.framework.lang.util.EventUtils;
+import com.adanac.framework.lang.utils.EventUtils;
 
 public class MyLogger {
 	private Logger logger = null;

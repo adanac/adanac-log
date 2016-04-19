@@ -1,6 +1,7 @@
 package com.adanac.framework.log.dto;
 
-import com.adanac.framework.context.RequestContext;
+
+import com.adanac.framework.contexts.RequestContext;
 
 import ch.qos.logback.classic.spi.LoggingEvent;
 

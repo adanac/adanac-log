@@ -12,7 +12,7 @@
   <name>adanac-log</name>
 
   <dependencies>
- 
+ 		 
         <dependency>
             <groupId>com.adanac.framework</groupId>
             <artifactId>adanac-uniconfig-client</artifactId>
@@ -73,4 +73,17 @@
 			<scope>compile</scope>
 		</dependency>
 	 </dependencies>
+	 
+	 <distributionManagement>
+ 		<repository>
+			<id>adanac-nexus-releases</id>
+			<name>adanac Release Repository</name>
+			<url>http://localhost:8081/nexus/content/repositories/releases/</url>
+		</repository>
+		<snapshotRepository>
+			<id>adanac-nexus-snapshots</id>
+			<name>adanac Snapshot Repository</name>
+			<url>http://localhost:8081/nexus/content/repositories/snapshots/</url>
+		</snapshotRepository>
+     </distributionManagement>
 </project>
